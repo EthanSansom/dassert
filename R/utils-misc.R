@@ -15,3 +15,7 @@ is_assertion_fail <- function(x) {
 is_assertion_pass <- function(x) {
   !anyNA(x) && all(x)
 }
+
+is_unnamed <- function(x) {
+  all(rlang::names2(x) == "")
+}
