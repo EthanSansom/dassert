@@ -6,7 +6,7 @@ rule <- function(test, fail = NULL, pass = NULL) {
   check_is_type(pass, is.character, "a character vector", null_ok = TRUE)
 
   structure(
-    test,
+    if (is_rule(test)) unclass(test) else test,
     fail = fail,
     pass = pass,
     class = c("dassert_rule", "logical")
