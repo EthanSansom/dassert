@@ -18,4 +18,5 @@ Imports:
     cli,
     dplyr (>= 1.1.0),
     magrittr,
-    rlang
+    rlang,
+    vctrs
