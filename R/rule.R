@@ -5,6 +5,9 @@ rule <- function(test, fail = NULL, pass = NULL) {
   check_is_type(fail, is.character, "a character vector", null_ok = TRUE)
   check_is_type(pass, is.character, "a character vector", null_ok = TRUE)
 
+  if (!is.null(fail) && is_unnamed(fail)) fail <- fail_bullet(fail)
+  if (!is.null(pass) && is_unnamed(pass)) pass <- pass_bullet(pass)
+
   structure(
     if (is_rule(test)) unclass(test) else test,
     fail = fail,
@@ -14,17 +17,26 @@ rule <- function(test, fail = NULL, pass = NULL) {
 }
 
 #' @export
-print.dassert_rule <- function(x, ...) {
-  cli::cat_line("<rule>")
-  print(unclass(x))
-  cli::cat_line()
-  cli::cli_bullets(c(v = "pass", pass_message(x) %||% cli::col_grey("No Message")))
-  cli::cli_bullets(c(x = "fail", fail_message(x) %||% cli::col_grey("No Message")))
+is_rule <- function(x) {
+  inherits(x, "expect_rule")
 }
 
 #' @export
-is_rule <- function(x) {
-  inherits(x, "expect_rule")
+print.dassert_rule <- function(x, ...) {
+  cli::cat_line("<rule>")
+  print(as.logical(x))
+  cli::cat_line()
+  cli::cli_bullets_raw(
+    c(
+      "pass:", pass_message(x) %||% cli::col_grey("No Message"),
+      "fail:", fail_message(x) %||% cli::col_grey("No Message")
+    )
+  )
+}
+
+#' @export
+`[.dassert_rule` <- function(x, i) {
+  rule(NextMethod(), fail = fail_message(x), pass = pass_message(x))
 }
 
 pass_message <- function(x) {
