@@ -18,7 +18,7 @@ rule <- function(test, fail = NULL, pass = NULL) {
 
 #' @export
 is_rule <- function(x) {
-  inherits(x, "expect_rule")
+  inherits(x, "dassert_rule")
 }
 
 #' @export
