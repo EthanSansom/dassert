@@ -10,12 +10,33 @@ signal_assertion_failures <- function(
     .type = c("assert", "alert")
 ) {
 
-  ungrouped <- is.null(rlang::quo_get_expr(.by))
-  if (ungrouped) {
+  is_grouped <- dplyr::is_grouped_df(.data)
+  is_byed <- !is.null(rlang::quo_get_expr(.by))
+  if (is_byed) {
+    if (is_grouped) {
+      stop_input_incompatible(
+        "Can't supply `.by` when `.data` is a grouped data frame.",
+        call = .call
+      )
+    } else if (is_rowwise_df(.data)) {
+      stop_input_incompatible(
+        "Can't supply `.by` when `.data` is a rowwise data frame.",
+        call = .call
+      )
+    }
+  }
+  is_ungrouped <- !(is_grouped || is_byed)
+
+  if (is_ungrouped) {
     results <- handle_mutate_errors(dplyr::mutate(.data, ..., .keep = "none"))
-  } else {
+  } else if (is_byed) {
     results <- handle_mutate_errors(dplyr::mutate(.data, ..., .by = {{ .by }}, .keep = "none"))
     results <- dplyr::select(results, -{{ .by }}) # `mutate()` keeps columns in `.by`
+  } else {
+    results <- handle_mutate_errors(dplyr::mutate(.data, ..., .keep = "none"))
+    # This removes left-over grouping columns and has the wanted side-effect of
+    # un-grouping `results` (faster than using `ungroup()` + `select()`).
+    results <- results[!names(results) %in% dplyr::group_vars(results)]
   }
 
   assertions_passed_at <- map_lgl(results, is_assertion_pass)
@@ -28,29 +49,48 @@ signal_assertion_failures <- function(
   results <- results[!assertions_passed_at]
   env <- rlang::env_clone(rlang::caller_env())
 
-  if (ungrouped) {
+  if (is_ungrouped) {
     header <- .header %||% ungrouped_failure_header(n_fails, n_results)
     bullets <- ungrouped_fail_bullets(results, data = .data, env = env)
   } else {
+    group_ids <- if (is_byed) {
+      dplyr::mutate(.data, id = dplyr::cur_group_id(), .by = {{ .by }})[["id"]]
+    } else {
+      dplyr::group_indices(.data)
+    }
     header <- .header %||% grouped_failure_header(n_fails, n_results)
     bullets <- grouped_fail_bullets(
       results,
-      group_ids = dplyr::mutate(.data, id = dplyr::cur_group_id(), .by = {{ .by }})[["id"]],
+      group_ids = group_ids,
       data = .data,
       env = env
     )
   }
 
-  signal <- switch(.type, assert = cli::cli_abort, alert = cli::cli_warn)
-  class <- switch(
+  signal <- switch(
     .type,
-    assert = c("dassert_assertion_error", if (!ungrouped) "dassert_grouped_assertion_error"),
-    alert = c("dassert_assertion_warning", if (!ungrouped) "dassert_grouped_assertion_warning")
+    assert = cli::cli_abort,
+    alert = cli::cli_warn,
+    stop_internal("Unexpected {.arg {(.type)}: {.val {(.type)}}.")
   )
   signal(
     c(header, bullets),
-    class = class,
+    class = assertion_fail_class(type = .type, is_ungrouped = is_ungrouped),
     call = .call
+  )
+}
+
+assertion_fail_class <- function(type, is_ungrouped) {
+  switch(
+    type,
+    assert = c(
+      "dassert_error_assertion_fail",
+      if (!is_ungrouped) "dassert_error_grouped_assertion_fail"
+    ),
+    alert = c(
+      "dassert_warning_assertion_fail",
+      if (!is_ungrouped) "dassert_warning_grouped_assertion_fail"
+    )
   )
 }
 
@@ -65,6 +105,8 @@ signal_assertion_results <- function(
     .call = rlang::caller_env()
 ) {
 
+  # TODO: Update this later once you've squared away how we deal with grouped
+  # dataframes in `signal_assertion_failures`.
   ungrouped <- is.null(rlang::quo_get_expr(.by))
   if (ungrouped) {
     results <- handle_mutate_errors(dplyr::mutate(.data, ..., .keep = "none"))
