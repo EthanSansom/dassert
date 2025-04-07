@@ -19,3 +19,8 @@ is_assertion_pass <- function(x) {
 is_unnamed <- function(x) {
   all(rlang::names2(x) == "")
 }
+
+# `dplyr:::is_rowwise_df()` is internal, use the exported version if it is added
+is_rowwise_df <- function(x) {
+  inherits(x, "rowwise_df")
+}
